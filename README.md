@@ -126,14 +126,14 @@ To deploy training jobs:
     export MODEL="custom-sm-model-1"
     export MODEL_CONFIG="custom-sm-model-config-1"
     export MODEL_ENDPOINT="custom-sm-model-endpoint-1"
-    export INSTANCE_TYPE="m4.xlarge"
     export ACCELERATOR_TYPE="ml.eia1.large"
     ```
 1. Create a Sagemaker model:
     ```bash
     aws sagemaker create-model \
         --model-name "$MODEL" \
-        --primary-container "{\"Image\":\"$IMAGE\",\"ImageConfig\":{\"RepositoryAccessMode\":\"Platform\"},\"Mode\":\"SingleModel\",\"ModelDataUrl\":\"$MODELS_BUCKET\/$TRAINING_JOB\/output\/model.tar.gz\"}" \
+        --region $REGION \
+        --primary-container "{\"Image\":\"$SERVER_DOCKER_IMAGE\",\"ImageConfig\":{\"RepositoryAccessMode\":\"Platform\"},\"Mode\":\"SingleModel\",\"ModelDataUrl\":\"s3://$MODELS_BUCKET\/$TRAINING_JOB\/output\/model.tar.gz\"}" \
         --execution-role-arn "arn:aws:iam::$ACCOUNT_ID:role/AmazonSageMaker-ExecutionRole-$ROLE_PREFIX" 
     ```
 
@@ -141,14 +141,15 @@ To deploy training jobs:
     ```bash
     aws sagemaker create-endpoint-config \
         --endpoint-config-name "$MODEL_CONFIG" \
-        --production-variants "[{\"VariantName\":\"$MODEL\",\"ModelName\":\"custom-sm-model-$ROLE_PREFIX\",\"InitialInstanceCount\":1,\"InstanceType\":\"$INSTANCE_TYPE\",\"InitialVariantWeight\":1,\"AcceleratorType\":\"$ACCELERATOR_TYPE\"}]" \
-        --data-capture-config "{\"EnableCapture\":false}"
+        --region $REGION \
+        --production-variants "[{\"VariantName\":\"$MODEL\",\"ModelName\":\"$MODEL\",\"InitialInstanceCount\":1,\"InstanceType\":\"$INSTANCE_TYPE\",\"InitialVariantWeight\":1}]" \
     ```
 
 3. Create a Sagemaker model endpoint:
     ```bash
     aws sagemaker create-endpoint \
         --endpoint-name "$MODEL_ENDPOINT" \
+        --region $REGION \
         --endpoint-config-name "$MODEL_CONFIG"
     ```
     
@@ -182,20 +183,22 @@ https://docs.aws.amazon.com/lambda/latest/dg/with-s3-example.html
 
 3. Create Lambda function to execute the inference (from zip package) :
     ```bash
-    aws lambda create-function \ 
+    aws lambda create-function \
         --function-name $LAMBDA_FN_NAME \
-        --zip-file fileb://absolute-path-to-inferrer-lambda-package.zip \ 
+        --region $REGION \
+        --zip-file fileb:///home/oussamalouati/Sagemaker-prototype/src/client/lambda_function.zip \
         --handler lambda_function.lambda_handler \
         --runtime python3.8 \
         --environment "Variables={INFERENCE_OUTPUT_BUCKET=$INFERENCE_OUTPUT_BUCKET,MODEL_ENDPOINT=$MODEL_ENDPOINT}" \
-        --role-arn "arn:aws:iam::$ACCOUNT_ID:role/AmazonSageMaker-ExecutionRole-$ROLE_PREFIX"
+        --role "arn:aws:iam::$ACCOUNT_ID:role/AmazonSageMaker-ExecutionRole-$ROLE_PREFIX"
 
     ```
 5. Grant Lambda function Invoke perissions from S3 eventTrigger
    ```bash
     aws lambda add-permission  \
-        --function-name $LAMBDA_FN_NAME \ 
-        --action lambda:InvokeFunction \   
+        --function-name $LAMBDA_FN_NAME \
+        --region $REGION \
+        --action lambda:InvokeFunction \
         --statement-id s3-account \
         --principal s3.amazonaws.com \
         --source-arn arn:aws:s3:::$INFERENCE_INPUT_BUCKET \
@@ -206,8 +209,8 @@ https://docs.aws.amazon.com/lambda/latest/dg/with-s3-example.html
    ```bash
     aws s3api put-bucket-notification-configuration  \
         --bucket $INFERENCE_INPUT_BUCKET \
-        --notification-configuration "{\"LambdaFunctionConfigurations\":[{\"Id\":\"$LAMBDA_FUNCTION_CONFIGURATION_ID\",\"LambdaFunctionArn\":\"arn:aws:lambda:$REGION:$ACCOUNT_ID:function:$LAMBDA_FN_NAME\",\"Events\":[\"s3:ReducedRedundancyLostObject\",\"s3:ObjectCreated:*\",\"s3:ObjectCreated:Put\",\"s3:ObjectCreated:Post\",\"s3:ObjectCreated:Copy\",\"s3:ObjectCreated:CompleteMultipartUpload\"]}]}"
-
+        --notification-configuration "{\"LambdaFunctionConfigurations\":[{\"Id\":\"$LAMBDA_FUNCTION_CONFIGURATION_ID\",\"LambdaFunctionArn\":\"arn:aws:lambda:$REGION:$ACCOUNT_ID:function:$LAMBDA_FN_NAME\",\"Events\":[\"s3:ReducedRedundancyLostObject\",\"s3:ObjectCreated:Put\",\"s3:ObjectCreated:Post\",\"s3:ObjectCreated:Copy\",\"s3:ObjectCreated:CompleteMultipartUpload\"]}]}"
+    ```
 
 
 
