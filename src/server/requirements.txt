@@ -1,0 +1,4 @@
+tensorflow-gpu==2.4.1
+pandas==1.2.3
+Keras==2.4.3
+flask

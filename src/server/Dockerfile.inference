@@ -1,0 +1,16 @@
+FROM nvcr.io/nvidia/tensorflow:21.04-tf2-py3
+
+ENV LD_LIBRARY_PATH=/usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/lib64:/usr/include/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64/stubs:$LD_LIBRARY_PATH
+RUN ln -s /usr/local/cuda-11.3/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/cuda-11.3/targets/x86_64-linux/lib/libcusolver.so.10
+
+RUN apt-get update && apt-get install -y --no-install-recommends nginx curl
+RUN pip install --upgrade pip
+
+WORKDIR /opt/ml/code
+ENV PATH="/opt/ml/code:${PATH}"
+ADD requirements.txt .
+RUN pip install -r requirements.txt
+ADD . .
+
+
+ENTRYPOINT python train.py
