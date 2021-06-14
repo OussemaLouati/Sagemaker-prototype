@@ -12,5 +12,6 @@ ADD requirements.txt .
 RUN pip install -r requirements.txt
 ADD . .
 
+ADD nginx.conf /etc/nginx/nginx.conf
 
-ENTRYPOINT python train.py
+ENTRYPOINT service nginx start && python serve.py

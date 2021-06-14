@@ -19,8 +19,8 @@ To setup the AWS resources required for deploying the training and inference com
     ```bash
     export TRAIN_IMAGE="custom-training-test"
     export INFERENCE_IMAGE="custom-inference-test"
-    export DATA_BUCKET="custom-sm-test-data"
-    export MODELS_BUCKET="custom-sm-test-models"
+    export DATA_BUCKET="custom-test-data"
+    export MODELS_BUCKET="custom-test-models"
     export ROLE_PREFIX="1234"
     ```
 
@@ -46,7 +46,7 @@ To setup the AWS resources required for deploying the training and inference com
     ```bash
     aws iam create-role \
         --role-name AmazonSageMaker-ExecutionRole-$ROLE_PREFIX \
-        --assume-role-policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::$ACCOUNT_ID:user\/$AWS_USER\",\"Service\":\"sagemaker.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}" \
+        --assume-role-policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::$ACCOUNT_ID:user\/$AWS_USER\",\"Service\":\"sagemaker.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"},{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::$ACCOUNT_ID:user\/$AWS_USER\",\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}" \
         --description="Created from CLI"
     
     aws iam attach-role-policy \
@@ -75,7 +75,7 @@ To deploy training jobs:
 
 0. Prepare environment variables:
     ```bash
-    export TRAINING_JOB="custom-sm-training"
+    export TRAINING_JOB="custom-test-training"
     export TRAINING_DATA_BUCKET_URI=s3://$DATA_BUCKET/training
     export VALIDATION_DATA_BUCKET_URI=s3://$DATA_BUCKET/validation
     export INSTANCE_TYPE="ml.m4.xlarge"
@@ -94,12 +94,12 @@ To deploy training jobs:
 
 2. Build, tag and push the docker image to ECR:
     ```bash
-    docker build -t $TRAIN_IMAGE -f Dockerfile.training src/server
+    docker build -t $TRAIN_IMAGE -f src/server/Dockerfile.training src/server/
     docker tag $TRAIN_IMAGE $MODEL_DOCKER_IMAGE
     docker push $MODEL_DOCKER_IMAGE
     ```
     ```bash
-    docker build -t $INFERENCE_IMAGE -f Dockerfile.inference src/server
+    docker build -t $INFERENCE_IMAGE -f  src/server/Dockerfile.inference src/server/
     docker tag $INFERENCE_IMAGE $SERVER_DOCKER_IMAGE
     docker push $SERVER_DOCKER_IMAGE
     ```
@@ -108,13 +108,14 @@ To deploy training jobs:
     ```bash    
     aws sagemaker create-training-job \
         --training-job-name "$TRAINING_JOB" \
+        --region $REGION \
         --hyper-parameters "{}" \
-        --algorithm-specification "{\"TrainingImage\":\"$MODEL_DOCKER_IMAGE\",\"TrainingInputMode\":\"File\",\"MetricDefinitions\":[{\"Name\":\"Validation Accuracy\",\"Regex\":\"val_accuracy: ([0-9\\.]+)\"}],\"EnableSageMakerMetricsTimeSeries\":true}" \
+        --algorithm-specification "{\"TrainingImage\":\"$MODEL_DOCKER_IMAGE\",\"TrainingInputMode\":\"File\"}" \
         --role-arn "arn:aws:iam::$ACCOUNT_ID:role/AmazonSageMaker-ExecutionRole-$ROLE_PREFIX" \
         --input-data-config "[{\"ChannelName\":\"training\",\"DataSource\":{\"S3DataSource\":{\"S3DataType\":\"S3Prefix\",\"S3Uri\":\"$TRAINING_DATA_BUCKET_URI\",\"S3DataDistributionType\":\"FullyReplicated\"}},\"CompressionType\":\"None\",\"RecordWrapperType\":\"None\",\"InputMode\":\"File\"},{\"ChannelName\":\"validation\",\"DataSource\":{\"S3DataSource\":{\"S3DataType\":\"S3Prefix\",\"S3Uri\":\"$VALIDATION_DATA_BUCKET_URI\",\"S3DataDistributionType\":\"FullyReplicated\"}},\"CompressionType\":\"None\",\"RecordWrapperType\":\"None\",\"InputMode\":\"File\"}]"  \
-        --output-data-config "{\"S3OutputPath\":\"$MODELS_BUCKET\"}" \
+        --output-data-config "{\"S3OutputPath\":\"s3://$MODELS_BUCKET\"}" \
         --resource-config "{\"InstanceType\":\"$INSTANCE_TYPE\",\"InstanceCount\":1,\"VolumeSizeInGB\":$INSTANCE_VOLUME}" \
-        --stopping-condition "{\"MaxRuntimeInSeconds\":$MAX_RUN_TIME,\"MaxWaitTimeInSeconds\":$MAX_WAIT_TIME}"
+        --stopping-condition "{\"MaxRuntimeInSeconds\":$MAX_RUN_TIME}"
     ```
 
 
@@ -199,7 +200,7 @@ https://docs.aws.amazon.com/lambda/latest/dg/with-s3-example.html
         --principal s3.amazonaws.com \
         --source-arn arn:aws:s3:::$INFERENCE_INPUT_BUCKET \
         --source-account $ACCOUNT_ID
-        
+
 4. Enable S3 eventTrigger on the created Lambda Function
 
    ```bash
